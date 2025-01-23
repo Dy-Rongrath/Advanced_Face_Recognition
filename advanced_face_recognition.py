@@ -46,6 +46,7 @@ def face_recognition_process(frame, known_encodings, known_names):
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     face_locations = face_recognition.face_locations(rgb_frame, model="cnn")
     face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+    names = []
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
         matches = face_recognition.compare_faces(known_encodings, face_encoding, tolerance=0.4)
         name = "Unknown"
@@ -54,13 +55,21 @@ def face_recognition_process(frame, known_encodings, known_names):
             name = known_names[first_match_index]
         cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
         cv2.putText(frame, name, (left + 6, bottom - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    return frame
+        names.append(name)
+    return frame, names
 
 def image_recognition(image_path, known_encodings, known_names):
     image = cv2.imread(image_path)
-    image = face_recognition_process(image, known_encodings, known_names)
-    cv2.imshow('Face Recognition', image)
-    cv2.waitKey(0)  # Wait until any key is pressed
+    if image is None:
+        print("Error: Image could not be loaded.")
+        return
+    processed_image, detected_names = face_recognition_process(image, known_encodings, known_names)
+    cv2.imshow('Face Recognition', processed_image)
+    if detected_names:  # Save the image if faces are detected
+        output_image_path = os.path.join(output_dir, f"detected_{os.path.basename(image_path)}")
+        cv2.imwrite(output_image_path, processed_image)
+        print(f"Detected faces saved to {output_image_path}")
+    cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 def video_processing_thread(video_source, known_encodings, known_names, output_file, use_webcam=False):
@@ -84,12 +93,12 @@ def video_processing_thread(video_source, known_encodings, known_names, output_f
             if not ret:
                 break
             if frame_count % SKIP_FRAMES == 0:  # Skip frames to reduce load
-                frame = face_recognition_process(frame, known_encodings, known_names)
+                frame, _ = face_recognition_process(frame, known_encodings, known_names)
                 cv2.imshow('Real-Time Face Recognition', frame)
                 if SAVE_OUTPUT and video_writer:
                     video_writer.write(frame)
             frame_count += 1
-            if cv2.waitKey(1) & 0xFF == ord('q'):  # Responsive GUI interaction
+            if cv2.waitKey(1) & 0xFF == ord('q'):
                 print("Stopping video processing...")
                 break
     finally:
