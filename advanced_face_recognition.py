@@ -7,14 +7,14 @@ import threading
 from datetime import datetime
 
 # Configuration
-VIDEO_SOURCE = "./video/Download.mp4"
 SAVE_OUTPUT = True
 output_dir = "./output"
 if not os.path.exists(output_dir):
-    os.makedirs(output_dir)  # Ensure the output directory exists
+    os.makedirs(output_dir)
 OUTPUT_FILE = os.path.join(output_dir, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
-FRAME_RESIZE_SCALE = 0.5  # Downscale to increase processing speed
+FRAME_RESIZE_SCALE = 1
 ENCODINGS_FILE = 'known_faces_encodings.pkl'
+SKIP_FRAMES = 2  # Increase to skip more frames
 
 def save_encodings(encodings_file, known_encodings, known_names):
     with open(encodings_file, 'wb') as f:
@@ -56,7 +56,16 @@ def face_recognition_process(frame, known_encodings, known_names):
         cv2.putText(frame, name, (left + 6, bottom - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
     return frame
 
-def video_processing_thread(video_source, known_encodings, known_names, output_file):
+def image_recognition(image_path, known_encodings, known_names):
+    image = cv2.imread(image_path)
+    image = face_recognition_process(image, known_encodings, known_names)
+    cv2.imshow('Face Recognition', image)
+    cv2.waitKey(0)  # Wait until any key is pressed
+    cv2.destroyAllWindows()
+
+def video_processing_thread(video_source, known_encodings, known_names, output_file, use_webcam=False):
+    if use_webcam:
+        video_source = 0  # Default webcam
     video_capture = cv2.VideoCapture(video_source)
     if not video_capture.isOpened():
         print("Error: Cannot open video source.")
@@ -66,24 +75,20 @@ def video_processing_thread(video_source, known_encodings, known_names, output_f
     frame_height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT) * FRAME_RESIZE_SCALE)
     video_writer = None
     frame_count = 0
-    skip_frames = 2  # Process every other frame to decrease load
-
-    if SAVE_OUTPUT:
+    if SAVE_OUTPUT and not use_webcam:
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         video_writer = cv2.VideoWriter(output_file, fourcc, fps, (frame_width, frame_height))
-
     try:
         while True:
             ret, frame = video_capture.read()
             if not ret:
                 break
-            if frame_count % skip_frames == 0:  # Skip frames to reduce load
+            if frame_count % SKIP_FRAMES == 0:  # Skip frames to reduce load
                 frame = face_recognition_process(frame, known_encodings, known_names)
                 cv2.imshow('Real-Time Face Recognition', frame)
                 if SAVE_OUTPUT and video_writer:
                     video_writer.write(frame)
             frame_count += 1
-
             if cv2.waitKey(1) & 0xFF == ord('q'):  # Responsive GUI interaction
                 print("Stopping video processing...")
                 break
@@ -99,4 +104,14 @@ if __name__ == "__main__":
         print(f"Error: Directory '{KNOWN_FACES_DIR}' does not exist.")
         exit(1)
     known_encodings, known_names = load_known_faces(KNOWN_FACES_DIR, ENCODINGS_FILE)
-    threading.Thread(target=video_processing_thread, args=(VIDEO_SOURCE, known_encodings, known_names, OUTPUT_FILE)).start()
+    choice = input("Choose input method (image/video/webcam): ").strip().lower()
+    if choice == 'video':
+        video_source = input("Enter video file path: ").strip()
+        threading.Thread(target=video_processing_thread, args=(video_source, known_encodings, known_names, OUTPUT_FILE)).start()
+    elif choice == 'image':
+        image_path = input("Enter image file path: ").strip()
+        image_recognition(image_path, known_encodings, known_names)
+    elif choice == 'webcam':
+        threading.Thread(target=video_processing_thread, args=(None, known_encodings, known_names, OUTPUT_FILE, True)).start()
+    else:
+        print("Invalid input method selected.")
