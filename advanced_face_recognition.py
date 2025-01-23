@@ -25,8 +25,8 @@ def load_encodings(encodings_file):
         data = pickle.load(f)
     return data['encodings'], data['names']
 
-def load_known_faces(known_faces_dir, encodings_file):
-    if os.path.exists(encodings_file):
+def load_known_faces(known_faces_dir, encodings_file, relearn=False):
+    if os.path.exists(encodings_file) and not relearn:
         return load_encodings(encodings_file)
     known_encodings = []
     known_names = []
@@ -103,7 +103,8 @@ if __name__ == "__main__":
     if not os.path.exists(KNOWN_FACES_DIR):
         print(f"Error: Directory '{KNOWN_FACES_DIR}' does not exist.")
         exit(1)
-    known_encodings, known_names = load_known_faces(KNOWN_FACES_DIR, ENCODINGS_FILE)
+    relearn = input("Do you want to relearn the known faces? (yes/no): ").strip().lower() == 'yes'
+    known_encodings, known_names = load_known_faces(KNOWN_FACES_DIR, ENCODINGS_FILE, relearn)
     choice = input("Choose input method (image/video/webcam): ").strip().lower()
     if choice == 'video':
         video_source = input("Enter video file path: ").strip()
