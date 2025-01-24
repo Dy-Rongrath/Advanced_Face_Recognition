@@ -5,6 +5,7 @@ import pickle
 import threading
 import numpy as np
 from datetime import datetime
+import logging
 
 # Configuration
 SAVE_OUTPUT        = True
@@ -12,21 +13,36 @@ OUTPUT_DIR         = "./output"
 OUTPUT_FILE        = os.path.join(OUTPUT_DIR, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
 ENCODINGS_FILE     = 'known_faces_encodings.pkl'
 FRAME_RESIZE_SCALE = 0.5  # Adjust for performance
-SKIP_FRAMES        = 2  # Increase to skip more frames
+SKIP_FRAMES        = 2    # Increase to skip more frames
 
-if not os.path.exists(OUTPUT_DIR): 
-    os.makedirs(OUTPUT_DIR)
+# Logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def ensure_dir(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 def save_encodings(encodings_file, known_encodings, known_names):
-    with open(encodings_file, 'wb') as f:
-        pickle.dump({'encodings': known_encodings, 'names': known_names}, f)
+    
+    try:
+        with open(encodings_file, 'wb') as f:
+            pickle.dump({'encodings': known_encodings, 'names': known_names}, f)
+        logging.info(f"Encodings saved to {encodings_file}")
+
+    except Exception as e:
+        logging.error(f"Error saving encodings: {e}")
 
 def load_encodings(encodings_file):
-    with open(encodings_file, 'rb') as f:
-        data = pickle.load(f)
 
-    return data['encodings'], data['names']
-
+    try:
+        with open(encodings_file, 'rb') as f:
+            data = pickle.load(f)
+        return data['encodings'], data['names']
+    
+    except Exception as e:
+        logging.error(f"Error loading encodings: {e}")
+        return [], []
+    
 def load_known_faces(known_faces_dir, encodings_file, relearn=False):
 
     if os.path.exists(encodings_file) and not relearn:
@@ -37,20 +53,24 @@ def load_known_faces(known_faces_dir, encodings_file, relearn=False):
 
     for file_name in os.listdir(known_faces_dir):
         if file_name.endswith(('.jpg', '.jpeg', '.png')):
+
             image_path = os.path.join(known_faces_dir, file_name)
+
             try:
                 image     = face_recognition.load_image_file(image_path)
                 encodings = face_recognition.face_encodings(image)
+
                 if encodings:
                     known_encodings.append(encodings[0])
                     known_names.append(os.path.splitext(file_name)[0])
+
                 else:
-                    print(f"No face detected in {file_name}")
+                    logging.warning(f"No face detected in {file_name}")
+
             except Exception as e:
-                print(f"Error processing {file_name}: {e}")
+                logging.error(f"Error processing {file_name}: {e}")
 
     save_encodings(encodings_file, known_encodings, known_names)
-
     return known_encodings, known_names
 
 def face_recognition_process(frame, known_encodings, known_names):
@@ -61,9 +81,9 @@ def face_recognition_process(frame, known_encodings, known_names):
     names          = []
 
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-        distances = face_recognition.face_distance(known_encodings, face_encoding)
+        distances        = face_recognition.face_distance(known_encodings, face_encoding)
         best_match_index = np.argmin(distances) if distances.size > 0 else None
-        name = "Unknown"
+        name             = "Unknown"
 
         if best_match_index is not None and distances[best_match_index] < 0.6:
             name = known_names[best_match_index]
@@ -77,12 +97,13 @@ def face_recognition_process(frame, known_encodings, known_names):
 def image_recognition(image_path, known_encodings, known_names):
 
     if not os.path.exists(image_path):
-        print(f"Error: Image file '{image_path}' does not exist.")
+        logging.error(f"Image file '{image_path}' does not exist.")
         return
 
     image = cv2.imread(image_path)
+    
     if image is None:
-        print("Error: Image could not be loaded.")
+        logging.error("Image could not be loaded.")
         return
 
     processed_image, detected_names = face_recognition_process(image, known_encodings, known_names)
@@ -91,7 +112,7 @@ def image_recognition(image_path, known_encodings, known_names):
     if detected_names:
         output_image_path = os.path.join(OUTPUT_DIR, f"detected_{os.path.basename(image_path)}")
         cv2.imwrite(output_image_path, processed_image)
-        print(f"Detected faces saved to {output_image_path}")
+        logging.info(f"Detected faces saved to {output_image_path}")
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -102,27 +123,31 @@ def video_processing_thread(video_source, known_encodings, known_names, output_f
         video_source = 0  # Default webcam
 
     if not use_webcam and not os.path.exists(video_source):
-        print(f"Error: Video file '{video_source}' does not exist.")
+        logging.error(f"Video file '{video_source}' does not exist.")
         return
 
     video_capture = cv2.VideoCapture(video_source)
+
     if not video_capture.isOpened():
-        print("Error: Cannot open video source.")
+        logging.error("Cannot open video source.")
         return
     
-    fps = video_capture.get(cv2.CAP_PROP_FPS)
-    frame_width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH) * FRAME_RESIZE_SCALE)
+    fps          = video_capture.get(cv2.CAP_PROP_FPS)
+    frame_width  = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH) * FRAME_RESIZE_SCALE)
     frame_height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT) * FRAME_RESIZE_SCALE)
     video_writer = None
 
     if SAVE_OUTPUT and not use_webcam:
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        fourcc       = cv2.VideoWriter_fourcc(*'XVID')
         video_writer = cv2.VideoWriter(output_file, fourcc, fps, (frame_width, frame_height))
 
     try:
         frame_count = 0
+
         while True:
+
             ret, frame = video_capture.read()
+
             if not ret:
                 break
 
@@ -131,27 +156,32 @@ def video_processing_thread(video_source, known_encodings, known_names, output_f
             if frame_count % SKIP_FRAMES == 0:
                 frame, _ = face_recognition_process(frame, known_encodings, known_names)
                 cv2.imshow('Real-Time Face Recognition', frame)
+
                 if SAVE_OUTPUT and video_writer:
                     video_writer.write(frame)
 
             frame_count += 1
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
-                print("Stopping video processing...")
+                logging.info("Stopping video processing...")
                 break
 
     finally:
         video_capture.release()
+
         if video_writer:
             video_writer.release()
+
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-
     KNOWN_FACES_DIR = "./known_faces"
 
     if not os.path.exists(KNOWN_FACES_DIR):
-        print(f"Error: Directory '{KNOWN_FACES_DIR}' does not exist.")
+        logging.error(f"Directory '{KNOWN_FACES_DIR}' does not exist.")
         exit(1)
+
+    ensure_dir(OUTPUT_DIR)
 
     relearn = input("Do you want to relearn the known faces? (yes/no): ").strip().lower() == 'yes'
     known_encodings, known_names = load_known_faces(KNOWN_FACES_DIR, ENCODINGS_FILE, relearn)
@@ -170,4 +200,4 @@ if __name__ == "__main__":
         threading.Thread(target=video_processing_thread, args=(None, known_encodings, known_names, OUTPUT_FILE, True)).start()
 
     else:
-        print("Invalid input method selected.")
+        logging.error("Invalid input method selected.")
