@@ -15,8 +15,8 @@ KNOWN_FACES_DIR    = "./GIC_24-Images"
 OUTPUT_DIR         = "./output"
 OUTPUT_FILE        = os.path.join(OUTPUT_DIR, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
 ENCODINGS_FILE     = 'known_faces_encodings.pkl'
-FRAME_RESIZE_SCALE = 2   # Adjust for performance
-SKIP_FRAMES        = 10  # Increase to skip more frames
+FRAME_RESIZE_SCALE = 1   # Adjust for performance
+SKIP_FRAMES        = 2  # Increase to skip more frames
 
 
 # Logging configuration
@@ -50,11 +50,11 @@ def load_student_data(student_list_file):
             reader = csv.DictReader(file)
             for row in reader:
                 student_data[row['ID-Card']] = {
-                    'Name': row['Student Name'],
-                    'Department': row['Department-Code'],
-                    'Year': row['Year'],
-                    'Semester': row['Semester'],
-                    'Group': row['Group']
+                    'Name'       : row['Student Name'],
+                    'Department' : row['Department-Code'],
+                    'Year'       : row['Year'],
+                    'Semester'   : row['Semester'],
+                    'Group'      : row['Group']
                 }
         logging.info(f"Student data loaded from {student_list_file}")
     except Exception as e:
@@ -86,19 +86,28 @@ def load_known_faces(known_faces_dir, encodings_file, relearn=False):
     return known_encodings, known_names
 
 def face_recognition_process(frame, known_encodings, known_names, student_data):
+
+    # Convert frame to grayscale
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    rgb_frame      = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    face_locations = face_recognition.face_locations(rgb_frame, model="hog")
+    # Detect face locations
+    face_locations = face_recognition.face_locations(gray_frame, model="hog")
+    
+    # Convert grayscale frame back to RGB
+    rgb_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2RGB)
+    
+    # Encode faces
     face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-    names          = []
+    names = []
 
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-        
-        distances        = face_recognition.face_distance(known_encodings, face_encoding)
+        distances = face_recognition.face_distance(known_encodings, face_encoding)
         best_match_index = np.argmin(distances) if distances.size > 0 else None
-        name             = "Unknown"
-        confidence       = 0
+        name = "Unknown"
+        confidence = 0
 
+        # Determine if the face is recognized
+        is_recognized = False
         if best_match_index is not None:
             confidence = 1 - distances[best_match_index]  # Convert distance to confidence
             if confidence >= 0.6:  # Threshold for a valid match
@@ -106,19 +115,23 @@ def face_recognition_process(frame, known_encodings, known_names, student_data):
                 if student_id in student_data:
                     student = student_data[student_id]
                     name = f"{student_id}, {student['Name']}, {student['Department']}, {confidence * 100:.2f}%"
+                    is_recognized = True
                 else:
                     name = f"{student_id}, Unknown, Unknown, {confidence * 100:.2f}%"
 
-        # Draw bounding box
-        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+        # Set colors based on status
+        box_color = (0, 255, 0) if is_recognized else (0, 0, 255)
+        text_color = (0, 255, 0) if is_recognized else (0, 0, 255)
 
-        font           = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale     = 0.7
+        # Draw box
+        cv2.rectangle(frame, (left, top), (right, bottom), box_color, 3)
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
         font_thickness = 2
-        text_size      = cv2.getTextSize(name, font, font_scale, font_thickness)[0]
-        text_color     = (255 , 0, 0)
-        text_x         = left + (right - left - text_size[0]) // 2
-        text_y         = bottom + text_size[1] + 10
+        text_size = cv2.getTextSize(name, font, font_scale, font_thickness)[0]
+        text_x = left + (right - left - text_size[0]) // 2
+        text_y = bottom + text_size[1] + 10
 
         # Draw text
         cv2.putText(frame, name, (text_x, text_y), font, font_scale, text_color, font_thickness)
@@ -132,6 +145,7 @@ def image_recognition(image_path, known_encodings, known_names, student_data):
         return
 
     image = cv2.imread(image_path)
+
     if image is None:
         logging.error("Image could not be loaded.")
         return
@@ -160,13 +174,13 @@ def video_processing_thread(video_source, known_encodings, known_names, student_
         logging.error("Cannot open video source.")
         return
     
-    fps = video_capture.get(cv2.CAP_PROP_FPS)
-    frame_width = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH) * FRAME_RESIZE_SCALE)
+    fps          = video_capture.get(cv2.CAP_PROP_FPS)
+    frame_width  = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH) * FRAME_RESIZE_SCALE)
     frame_height = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT) * FRAME_RESIZE_SCALE)
     video_writer = None
 
     if SAVE_OUTPUT and not use_webcam:
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        fourcc       = cv2.VideoWriter_fourcc(*'XVID')
         video_writer = cv2.VideoWriter(output_file, fourcc, fps, (frame_width, frame_height))
 
     try:
@@ -206,12 +220,12 @@ if __name__ == "__main__":
     ensure_dir(OUTPUT_DIR)
 
     # Load student data from CSV
-    student_data = load_student_data(STUDENT_LIST_FILE)
+    student_data    = load_student_data(STUDENT_LIST_FILE)
 
-    relearn = input("Do you want to relearn the known faces? (yes/no): ").strip().lower() == 'yes'
-    known_encodings, known_names = load_known_faces(KNOWN_FACES_DIR, ENCODINGS_FILE, relearn)
+    relearn         = input("Do you want to relearn the known faces? (yes/no): ").strip().lower() == 'yes'
+    known_encodings , known_names = load_known_faces(KNOWN_FACES_DIR, ENCODINGS_FILE, relearn)
     
-    choice = input("Choose input method (image/video/webcam): ").strip().lower()
+    choice          = input("Choose input method (image/video/webcam): ").strip().lower()
 
     if choice == 'video':
         video_source = input("Enter video file path: ").strip()

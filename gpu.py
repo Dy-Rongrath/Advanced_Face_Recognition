@@ -12,7 +12,7 @@ import csv
 SAVE_OUTPUT = True
 OUTPUT_DIR = "./output"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
-ENCODINGS_FILE = 'known_faces_encodings.pkl'
+ENCODINGS_FILE = 'GPU-known_faces_encodings.pkl'
 FRAME_RESIZE_SCALE = 1  # Adjust for performance
 SKIP_FRAMES = 2  # Increase to skip more frames
 STUDENT_LIST_FILE = "./Student-list.csv"
