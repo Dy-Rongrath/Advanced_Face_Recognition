@@ -12,11 +12,11 @@ import queue
 
 # Configuration
 SAVE_OUTPUT        = True
-STUDENT_LIST_FILE  = "./Student-list.csv"
-KNOWN_FACES_DIR    = "./GIC_24-Images"
-OUTPUT_DIR         = "./output"
+STUDENT_LIST_FILE  = "../Student-list.csv"
+KNOWN_FACES_DIR    = "../GIC_24-Images"
+OUTPUT_DIR         = "../output"
 OUTPUT_FILE        = os.path.join(OUTPUT_DIR, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
-ENCODINGS_FILE     = 'known_faces_encodings.pkl'
+ENCODINGS_FILE     = 'gpu-encoding.pkl'
 FRAME_RESIZE_SCALE = 1.0  # Adjust for performance
 SKIP_FRAMES        = 1  # Increase to skip more frames
 
