@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Face Recognition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+
+    <div class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl text-center">
+            <h1 class="text-3xl font-semibold mb-4 text-gray-800">Real-Time Face Recognition</h1>
+
+            <div class="flex gap-5 justify-center items-start mb-4">
+                <video id="videoElement" width="320" height="240" autoplay class="border-2 border-gray-300 rounded-lg shadow-md"></video>
+                <canvas id="canvas" width="640" height="480" class="border-2 border-gray-300 rounded-lg shadow-md"></canvas>
+            </div>
+
+            <!-- Start/Stop Model Button -->
+            <button id="startButton" class="px-6 py-2 bg-blue-500 text-white font-bold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-300">
+                Start Model
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvas');
+        const canvasContext = canvas.getContext('2d');
+        let isModelRunning = false;
+        let captureInterval;
+
+        // Access webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((stream) => {
+                videoElement.srcObject = stream;
+            })
+            .catch((err) => {
+                console.log("Error accessing webcam: " + err);
+            });
+
+        // Capture and send frames to the backend for processing
+        function captureAndSendFrame() {
+            if (isModelRunning) {
+                canvasContext.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg');
+
+                fetch('/process_frame', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ image: imageData })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.image) {
+                        const img = new Image();
+                        img.src = "data:image/jpeg;base64," + data.image;
+
+                        img.onload = () => {
+                            canvasContext.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        };
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+            }
+        }
+
+        // Button click handler to start/stop model
+        document.getElementById('startButton').addEventListener('click', () => {
+            isModelRunning = !isModelRunning;
+            console.log("Model running:", isModelRunning);
+
+            // Toggle button text
+            const button = document.getElementById('startButton');
+            if (isModelRunning) {
+                button.textContent = 'Stop Model'; // Change button text when starting
+                // Start capturing frames
+                captureInterval = setInterval(captureAndSendFrame, 300);
+            } else {
+                button.textContent = 'Start Model'; // Change button text when stopping
+                // Stop capturing frames
+                clearInterval(captureInterval);
+            }
+        });
+    </script>
+</body>
+</html>

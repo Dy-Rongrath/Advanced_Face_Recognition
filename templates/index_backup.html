@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Face Recognition</title>
+</head>
+<body>
+    <h1>Real-Time Face Recognition</h1>
+    <video id="videoElement" width="640" height="480" autoplay></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    
+    <script>
+        // Set up webcam feed
+        const videoElement = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvas');
+        const canvasContext = canvas.getContext('2d');
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((stream) => {
+                videoElement.srcObject = stream;
+            })
+            .catch((err) => {
+                console.log("Error accessing webcam: " + err);
+            });
+
+        // Send webcam frames to backend for processing
+        function captureAndSendFrame() {
+            canvasContext.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg');
+            
+            // Send frame to Python backend for face recognition
+            fetch('/process_frame', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update UI with recognized face info (or bounding boxes)
+                console.log(data);
+                // You can use data to draw bounding boxes or display names
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        }
+
+        setInterval(captureAndSendFrame, 100);  // Send frame every 100ms
+    </script>
+</body>
+</html>
