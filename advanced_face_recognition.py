@@ -49,11 +49,9 @@ def load_student_data(student_list_file):
         with open(student_list_file, mode='r') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                student_data[row['ID-Card']] = {
-                    'Name'       : row['Student Name'],
-                    'Department' : row['Department-Code'],
-                    'Year'       : row['Year'],
-                    'Semester'   : row['Semester'],
+                student_data[row['ID']] = {
+                    'Name'       : row['Name'],
+                    'Department' : row['Department'],
                     'Group'      : row['Group']
                 }
         logging.info(f"Student data loaded from {student_list_file}")
